@@ -16,6 +16,9 @@ local trackedMapID = 2346 -- Undermine
 local trackedVignetteID = {6757, 6687} -- SCRAP Heap
 local trackedVignetteGUID = nil
 local lastUpdatedTime = GetServerTime()
+local DEFAULT_PIN_TEMPLATE = "VignettePinTemplate"
+-- Pin template name for the addon RareScanner, which changes the default pin template name
+local RS_PIN_TEMPLATE = "RSVignettePinTemplate"
 
 
 local function tableHas(tab, val)
@@ -118,13 +121,33 @@ function UpdateFrame:OnUpdate()
 	if (WorldMapFrame:IsShown() and WorldMapFrame.mapID == trackedMapID and not IsInInstance() and enabled and not InCombatLockdown()) then
 		local trackedVignettePin = nil
 		vignettesPathProvider:HideLine()
-		for pin in vignettesPathProvider:GetMap():EnumeratePinsByTemplate("VignettePinTemplate") do
-			if (tableHas(trackedVignetteID, pin:GetVignetteID())) then
-				-- None of these Checks work when you leave the map open and the vignette goes away
-				-- So you can't use them to detect when the line should disappear
-				-- if (not pin:IsShown() or not pin:IsVisible() or pin:IsSuppressed()) then
-				trackedVignettePin = pin
-				break
+		-- RareScanner changes the base VignettePinTemplate into RSVignettePinTemplate
+		local isRareScannerActive = RareScanner or false
+		local doRetry = true
+		local pinTemplate = DEFAULT_PIN_TEMPLATE
+		-- Be paranoid about an infinite loop due to some dump logic mistake I might make
+		local count = 0
+		while doRetry and count < 3 do
+			count = count + 1
+			for pin in vignettesPathProvider:GetMap():EnumeratePinsByTemplate(pinTemplate) do
+				if (tableHas(trackedVignetteID, pin:GetVignetteID())) then
+					-- None of these Checks work when you leave the map open and the vignette goes away
+					-- So you can't use them to detect when the line should disappear
+					-- if (not pin:IsShown() or not pin:IsVisible() or pin:IsSuppressed()) then
+					trackedVignettePin = pin
+					doRetry = false
+					break
+				end
+			end
+			doRetry = false
+			if (trackedVignettePin == nil and isRareScannerActive) then
+				-- Are we already retrying?
+				if (pinTemplate == RS_PIN_TEMPLATE) then
+					break
+				else
+					pinTemplate = RS_PIN_TEMPLATE
+					doRetry = true
+				end
 			end
 		end
 		if (trackedVignettePin == nil) then
