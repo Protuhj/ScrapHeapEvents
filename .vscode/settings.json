@@ -18,6 +18,7 @@
         "SlashCmdList",
         "WorldMapFrame",
         "MapCanvasDataProviderMixin",
-        "MapCanvasPinMixin"
+        "MapCanvasPinMixin",
+        "RareScanner"
     ]
 }
