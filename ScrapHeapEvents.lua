@@ -13,11 +13,7 @@ local PATHPIN_TEMPLATE = "ScrapHeapEventsPathPinTemplate"
 -------------------------------
 local TRACKED_MAP_ID = 2346               -- Undermine
 local VIGNETTES_TO_TRACK = { 6757, 6687 } -- SCRAP Heap
-local trackedVignetteGUID = nil
 local lastUpdatedTime = GetServerTime()
-local DEFAULT_PIN_TEMPLATE = "VignettePinTemplate"
--- Pin template name for the addon RareScanner, which changes the default pin template name
-local RS_PIN_TEMPLATE = "RSVignettePinTemplate"
 local MAP_TYPE_WORLD_MAP = 1
 local MAP_TYPE_BATTLEFIELD_MAP = 2
 
@@ -32,7 +28,6 @@ end
 
 local vignettesPathProvider = CreateFromMixins(MapCanvasDataProviderMixin)
 function vignettesPathProvider:HideLine()
-	trackedVignetteGUID = nil
 	self:GetMap():RemoveAllPinsByTemplate(PATHPIN_TEMPLATE)
 end
 
@@ -46,7 +41,6 @@ end
 
 local battlefieldMapPathProvider = CreateFromMixins(MapCanvasDataProviderMixin)
 function battlefieldMapPathProvider:HideLine()
-	trackedVignetteGUID = nil
 	-- Battlefield map may not be loaded yet
 	if self:GetMap() then
 		self:GetMap():RemoveAllPinsByTemplate(PATHPIN_TEMPLATE)
@@ -129,8 +123,7 @@ function ns.DrawLine(pin, type, xy1, xy2, mapType)
 	return (x1 + x2) / 2, (y1 + y2) / 2
 end
 
-local UpdateFrame = CreateFrame("frame")
-function UpdateFrame:OnUpdate()
+function ns.VignettesUpdated()
 	-- Let's not check this too often
 	if (GetServerTime() - lastUpdatedTime < 1) then
 		return
@@ -142,104 +135,53 @@ function UpdateFrame:OnUpdate()
 		(addonConfig["ShowOnBattlefieldMap"] and battlefieldMapShown)
 	local eitherMapInTrackedZone = (WorldMapFrame.mapID == TRACKED_MAP_ID) or
 		(BattlefieldMapFrame and BattlefieldMapFrame.mapID == TRACKED_MAP_ID)
-	--check if one of the maps is opened
+	ns.HideLines()
+	-- check if one of the maps is opened
 	if (shouldShow and eitherMapInTrackedZone and not IsInInstance() and addonConfig["Enabled"] and not InCombatLockdown()) then
-		local pinPosX, pinPosY
-		ns.HideLines()
-		-- RareScanner changes the base VignettePinTemplate into RSVignettePinTemplate
-		local isRareScannerActive = RareScanner or false
-		local doRetry = true
-		local pinTemplate = DEFAULT_PIN_TEMPLATE
-		-- Be paranoid about an infinite loop due to some dump logic mistake I might make
-		local count = 0
-		while doRetry and count < 3 do
-			count = count + 1
-			for pin in vignettesPathProvider:GetMap():EnumeratePinsByTemplate(pinTemplate) do
-				if (tableHas(VIGNETTES_TO_TRACK, pin:GetVignetteID())) then
-					-- None of these Checks work when you leave the map open and the vignette goes away
-					-- So you can't use them to detect when the line should disappear
-					-- if (not pin:IsShown() or not pin:IsVisible() or pin:IsSuppressed()) then
-					trackedVignetteGUID = pin:GetVignetteGUID()
-					pinPosX, pinPosY = pin:GetPosition()
-					doRetry = false
-					-- Break the for loop
-					break
-				end
-			end
-			if battlefieldMapShown then
-				for pin in battlefieldMapPathProvider:GetMap():EnumeratePinsByTemplate(pinTemplate) do
-					if (tableHas(VIGNETTES_TO_TRACK, pin:GetVignetteID())) then
-						-- None of these Checks work when you leave the map open and the vignette goes away
-						-- So you can't use them to detect when the line should disappear
-						-- if (not pin:IsShown() or not pin:IsVisible() or pin:IsSuppressed()) then
-						trackedVignetteGUID = pin:GetVignetteGUID()
-						pinPosX, pinPosY = pin:GetPosition()
-						doRetry = false
-						-- Break the for loop
+		local pinPos = nil
+		local vignettes = C_VignetteInfo.GetVignettes();
+		if vignettes then
+			for _, guid in ipairs(vignettes) do
+				local vignInfo = C_VignetteInfo.GetVignetteInfo(guid)
+				if vignInfo then
+					if tableHas(VIGNETTES_TO_TRACK, vignInfo.vignetteID) then
+						pinPos = C_VignetteInfo.GetVignettePosition(guid, TRACKED_MAP_ID)
 						break
 					end
 				end
 			end
-			doRetry = false
-			if (trackedVignetteGUID == nil and isRareScannerActive) then
-				-- Are we already retrying?
-				if (pinTemplate == RS_PIN_TEMPLATE) then
-					break
-				else
-					pinTemplate = RS_PIN_TEMPLATE
-					doRetry = true
-				end
-			end
 		end
-
-		-- No pin found (in reset stage)
-		if not trackedVignetteGUID then
+		-- No valid pin position found (in reset stage)
+		if not pinPos then
 			return
 		end
 
-		--get the player map position
+		-- get the player map position
 		local ppos = C_Map.GetPlayerMapPosition(TRACKED_MAP_ID, "player")
-
+		if (not ppos or not pinPos) then
+			return
+		end
 		if addonConfig["ShowOnWorldMap"] and WorldMapFrame:IsShown() and WorldMapFrame.mapID == TRACKED_MAP_ID then
-			if (not ppos or not pinPosX or not pinPosY) then
-				return
+			local theMap = vignettesPathProvider:GetMap()
+			if theMap then
+				theMap:AcquirePin(PATHPIN_TEMPLATE, LINE, ppos, pinPos, MAP_TYPE_WORLD_MAP)
 			end
-			local map = vignettesPathProvider:GetMap()
-			map:AcquirePin(PATHPIN_TEMPLATE, LINE, ppos, CreateVector2D(pinPosX, pinPosY), MAP_TYPE_WORLD_MAP)
 		end
 		if addonConfig["ShowOnBattlefieldMap"] and battlefieldMapShown then
-			if (not ppos or not pinPosX or not pinPosY) then
-				return
+			local theMap = battlefieldMapPathProvider:GetMap()
+			if theMap then
+				theMap:AcquirePin(PATHPIN_TEMPLATE, LINE, ppos, pinPos, MAP_TYPE_BATTLEFIELD_MAP)
 			end
-			local map = battlefieldMapPathProvider:GetMap()
-			map:AcquirePin(PATHPIN_TEMPLATE, LINE, ppos, CreateVector2D(pinPosX, pinPosY), MAP_TYPE_BATTLEFIELD_MAP)
 		end
-	else
-		ns.HideLines()
 	end
 end
 
+local UpdateFrame = CreateFrame("frame")
+
 -- Need this function to remove the line once the event is complete
 function UpdateFrame:OnEvent(event, arg1, ...)
-	-- print("event fired " .. event)
 	if event == "VIGNETTES_UPDATED" then
-		if not trackedVignetteGUID then
-			return
-		end
-		local vignettesByGUID = {};
-		local vignettes = C_VignetteInfo.GetVignettes();
-		if vignettes then
-			for _, guid in ipairs(vignettes) do
-				vignettesByGUID[guid] = true;
-				if guid == trackedVignetteGUID then
-					return
-				end
-			end
-		end
-		if not vignettesByGUID[trackedVignetteGUID] then
-			ns.HideLines()
-			return
-		end
+		ns.VignettesUpdated()
 	elseif event == "ZONE_CHANGED_NEW_AREA" then
 		if not addonConfig["Enabled"] then
 			ns.Disable()
@@ -290,11 +232,9 @@ function ns.ShouldBeActive()
 	if C_Map.GetBestMapForUnit("player") == TRACKED_MAP_ID then
 		-- print("everything activated")
 		UpdateFrame:RegisterEvent("VIGNETTES_UPDATED")
-		UpdateFrame:SetScript("OnUpdate", UpdateFrame.OnUpdate)
 	else
 		-- print("Wrong zone, inactive")
 		UpdateFrame:UnregisterEvent("VIGNETTES_UPDATED")
-		UpdateFrame:SetScript("OnUpdate", nil)
 	end
 end
 
@@ -307,7 +247,6 @@ end
 function ns.Disable()
 	ns.HideLines()
 	UpdateFrame:UnregisterEvent("VIGNETTES_UPDATED")
-	UpdateFrame:SetScript("OnUpdate", nil)
 end
 
 -- Toggle the enabled-state of the addon
