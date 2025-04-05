@@ -123,9 +123,9 @@ function ns.DrawLine(pin, type, xy1, xy2, mapType)
 	return (x1 + x2) / 2, (y1 + y2) / 2
 end
 
-function ns.VignettesUpdated()
+function ns.DoUpdate()
 	-- Let's not check this too often
-	if (GetServerTime() - lastUpdatedTime < 1) then
+	if (GetServerTime() - lastUpdatedTime < 2) then
 		return
 	end
 	-- print(GetServerTime())
@@ -180,9 +180,7 @@ local UpdateFrame = CreateFrame("frame")
 
 -- Need this function to remove the line once the event is complete
 function UpdateFrame:OnEvent(event, arg1, ...)
-	if event == "VIGNETTES_UPDATED" then
-		ns.VignettesUpdated()
-	elseif event == "ZONE_CHANGED_NEW_AREA" then
+	if event == "ZONE_CHANGED_NEW_AREA" then
 		if not addonConfig["Enabled"] then
 			ns.Disable()
 			return
@@ -231,10 +229,10 @@ end
 function ns.ShouldBeActive()
 	if C_Map.GetBestMapForUnit("player") == TRACKED_MAP_ID then
 		-- print("everything activated")
-		UpdateFrame:RegisterEvent("VIGNETTES_UPDATED")
+		UpdateFrame:SetScript("OnUpdate", ns.DoUpdate)
 	else
 		-- print("Wrong zone, inactive")
-		UpdateFrame:UnregisterEvent("VIGNETTES_UPDATED")
+		ns.Disable()
 	end
 end
 
@@ -246,7 +244,7 @@ end
 -- If the user wants the addon disabled
 function ns.Disable()
 	ns.HideLines()
-	UpdateFrame:UnregisterEvent("VIGNETTES_UPDATED")
+	UpdateFrame:SetScript("OnUpdate", nil)
 end
 
 -- Toggle the enabled-state of the addon
