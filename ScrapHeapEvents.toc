@@ -1,4 +1,4 @@
-## Interface: 110100
+## Interface: 110105
 ## Title: Scrap Heap Events
 ## Notes: Shows a line from your location to the S.C.R.A.P. Heap events in Undermine
 ## Author: Protuhj
