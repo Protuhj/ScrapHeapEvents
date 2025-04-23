@@ -2,7 +2,7 @@
 ## Title: Scrap Heap Events
 ## Notes: Shows a line from your location to the S.C.R.A.P. Heap events in Undermine
 ## Author: Protuhj
-## Version: 110100_06
+## Version: 110105_07
 ## DefaultState: Enabled
 ## SavedVariables: addonConfig
 ScrapHeapEventsMixin.xml
