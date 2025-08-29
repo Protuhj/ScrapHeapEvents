@@ -9,6 +9,8 @@ Contains some code fragments and ideas from other addons like WorldQuestTracker 
 local ADDON_NAME, ns = ...
 local LINE = 'Interface\\AddOns\\' .. ADDON_NAME .. '\\line'
 local PATHPIN_TEMPLATE = "ScrapHeapEventsPathPinTemplate"
+-- Coin playlist (https://www.wowhead.com/sound=304801/11-1amb-raid-casino-goldpile-emitter-0-6226592)
+ns.DEFAULT_ALERT_SOUND = 304801
 
 -------------------------------
 local TRACKED_MAP_ID = 2346               -- Undermine
@@ -125,21 +127,31 @@ end
 
 function ns.DoUpdate()
 	-- Let's not check this too often
-	if (GetServerTime() - lastUpdatedTime < 2) then
+	if (GetServerTime() - lastUpdatedTime < 3) then
 		return
 	end
 	-- print(GetServerTime())
 	lastUpdatedTime = GetServerTime()
 	local battlefieldMapShown = (BattlefieldMapFrame and BattlefieldMapFrame:IsShown()) or false
-	local shouldShow = (addonConfig["ShowOnWorldMap"] and WorldMapFrame:IsShown()) or
-		(addonConfig["ShowOnBattlefieldMap"] and battlefieldMapShown)
+	local shouldShow = (ns.SHEAddonConfig["ShowOnWorldMap"] and WorldMapFrame:IsShown()) or
+		(ns.SHEAddonConfig["ShowOnBattlefieldMap"] and battlefieldMapShown)
 	local eitherMapInTrackedZone = (WorldMapFrame.mapID == TRACKED_MAP_ID) or
 		(BattlefieldMapFrame and BattlefieldMapFrame.mapID == TRACKED_MAP_ID)
 	ns.HideLines()
 	-- check if one of the maps is opened
-	if (shouldShow and eitherMapInTrackedZone and not IsInInstance() and addonConfig["Enabled"] and not InCombatLockdown()) then
+	if (shouldShow and eitherMapInTrackedZone and not IsInInstance() and ns.SHEAddonConfig["Enabled"] and not InCombatLockdown()) then
 		local pinPos = nil
 		local vignettes = C_VignetteInfo.GetVignettes();
+		if vignettes and ns.SHEAddonConfig["DumpsterAlert"] then
+			for _, guid in ipairs(vignettes) do
+				local vignInfo = C_VignetteInfo.GetVignetteInfo(guid)
+				if vignInfo and vignInfo.name == "Overflowing Dumpster" then
+					PlaySound(ns.SHEAddonConfig["DumpsterAlertSound"], "master", true)
+					print("### Dumpster nearby!!!!")
+					break;
+				end
+			end
+		end
 		if vignettes then
 			for _, guid in ipairs(vignettes) do
 				local vignInfo = C_VignetteInfo.GetVignetteInfo(guid)
@@ -161,13 +173,13 @@ function ns.DoUpdate()
 		if (not ppos or not pinPos) then
 			return
 		end
-		if addonConfig["ShowOnWorldMap"] and WorldMapFrame:IsShown() and WorldMapFrame.mapID == TRACKED_MAP_ID then
+		if ns.SHEAddonConfig["ShowOnWorldMap"] and WorldMapFrame:IsShown() and WorldMapFrame.mapID == TRACKED_MAP_ID then
 			local theMap = vignettesPathProvider:GetMap()
 			if theMap then
 				theMap:AcquirePin(PATHPIN_TEMPLATE, LINE, ppos, pinPos, MAP_TYPE_WORLD_MAP)
 			end
 		end
-		if addonConfig["ShowOnBattlefieldMap"] and battlefieldMapShown then
+		if ns.SHEAddonConfig["ShowOnBattlefieldMap"] and battlefieldMapShown then
 			local theMap = battlefieldMapPathProvider:GetMap()
 			if theMap then
 				theMap:AcquirePin(PATHPIN_TEMPLATE, LINE, ppos, pinPos, MAP_TYPE_BATTLEFIELD_MAP)
@@ -181,27 +193,59 @@ local UpdateFrame = CreateFrame("frame")
 -- Need this function to remove the line once the event is complete
 function UpdateFrame:OnEvent(event, arg1, ...)
 	if event == "ZONE_CHANGED_NEW_AREA" then
-		if not addonConfig["Enabled"] then
+		if not ns.SHEAddonConfig["Enabled"] then
 			ns.Disable()
 			return
 		end
 		ns.ShouldBeActive()
 	elseif event == "VARIABLES_LOADED" then
 		-- Our saved variables, if they exist, have been loaded at this point.
-		if addonConfig == nil then
-			-- This is the first time this addon is loaded; set SVs to default values
-			addonConfig = {}
+		-- First time creating the new addon config
+		if SHEAddonConfig == nil then
+			SHEAddonConfig = {}
+			-- If a previous version was installed, then check if the old config exists
+			-- I'm a noob and didn't realize this was a global field
+			if addonConfig ~= nil then
+				-- Set default config options
+				if addonConfig["Enabled"] ~= nil then
+					print("Copying over old Enabled config")
+					SHEAddonConfig["Enabled"] = addonConfig["Enabled"]
+					addonConfig["Enabled"] = nil
+				end
+				if addonConfig["ShowOnWorldMap"] ~= nil then
+					print("Copying over old ShowOnWorldMap config")
+					SHEAddonConfig["ShowOnWorldMap"] = addonConfig["ShowOnWorldMap"]
+					addonConfig["ShowOnWorldMap"] = nil
+				end
+				if addonConfig["ShowOnBattlefieldMap"] ~= nil then
+					print("Copying over old ShowOnBattlefieldMap config")
+					SHEAddonConfig["ShowOnBattlefieldMap"] = addonConfig["ShowOnBattlefieldMap"]
+					addonConfig["ShowOnBattlefieldMap"] = nil
+				end
+			end
 		end
-		-- Set default config options
-		if addonConfig["Enabled"] == nil then
-			addonConfig["Enabled"] = true
+		-- Set default config options if not set
+		if SHEAddonConfig["Enabled"] == nil then
+			SHEAddonConfig["Enabled"] = true
 		end
-		if addonConfig["ShowOnWorldMap"] == nil then
-			addonConfig["ShowOnWorldMap"] = true
+		if SHEAddonConfig["ShowOnWorldMap"] == nil then
+			SHEAddonConfig["ShowOnWorldMap"] = true
 		end
-		if addonConfig["ShowOnBattlefieldMap"] == nil then
-			addonConfig["ShowOnBattlefieldMap"] = true
+		if SHEAddonConfig["ShowOnBattlefieldMap"] == nil then
+			SHEAddonConfig["ShowOnBattlefieldMap"] = true
 		end
+		-- Default to off, since people could be annoyed if they don't want it on
+		if SHEAddonConfig["DumpsterAlert"] == nil then
+			SHEAddonConfig["DumpsterAlert"] = false
+		end
+		-- Default to the Coin playlist
+		if SHEAddonConfig["DumpsterAlertSound"] == nil or
+			(tonumber(SHEAddonConfig["DumpsterAlertSound"]) or 0) <= 0 then
+			-- Coin playlist
+			SHEAddonConfig["DumpsterAlertSound"] = ns.DEFAULT_ALERT_SOUND
+		end
+		ns.SHEAddonConfig = SHEAddonConfig
+
 		UpdateFrame:UnregisterEvent("VARIABLES_LOADED")
 
 		--add the provider to pins
@@ -213,8 +257,8 @@ function UpdateFrame:OnEvent(event, arg1, ...)
 			BattlefieldMapFrame:AddDataProvider(battlefieldMapPathProvider)
 		end
 
-		print(ADDON_NAME .. " is " .. (addonConfig["Enabled"] and "enabled" or "disabled"))
-		if addonConfig["Enabled"] then
+		print(ADDON_NAME .. " is " .. (ns.SHEAddonConfig["Enabled"] and "enabled" or "disabled"))
+		if ns.SHEAddonConfig["Enabled"] then
 			ns.ShouldBeActive()
 		else
 			ns.Disable()
@@ -249,9 +293,9 @@ end
 
 -- Toggle the enabled-state of the addon
 function ns.Toggle()
-	addonConfig["Enabled"] = not addonConfig["Enabled"]
-	print(ADDON_NAME .. " is now " .. (addonConfig["Enabled"] and "enabled" or "disabled"))
-	if addonConfig["Enabled"] then
+	ns.SHEAddonConfig["Enabled"] = not ns.SHEAddonConfig["Enabled"]
+	print(ADDON_NAME .. " is now " .. (ns.SHEAddonConfig["Enabled"] and "enabled" or "disabled"))
+	if ns.SHEAddonConfig["Enabled"] then
 		ns.ShouldBeActive()
 	else
 		ns.Disable()
