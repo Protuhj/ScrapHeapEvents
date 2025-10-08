@@ -1,8 +1,8 @@
-## Interface: 110200
+## Interface: 110205
 ## Title: Scrap Heap Events
 ## Notes: Shows a line from your location to the S.C.R.A.P. Heap events in Undermine
 ## Author: Protuhj
-## Version: 110200_10
+## Version: 110205_11
 ## DefaultState: Enabled
 ## SavedVariables: SHEAddonConfig
 ScrapHeapEventsMixin.xml
