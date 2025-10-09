@@ -143,12 +143,19 @@ function ns.DoUpdate()
 		local pinPos = nil
 		local vignettes = C_VignetteInfo.GetVignettes();
 		if vignettes and ns.SHEAddonConfig["DumpsterAlert"] then
+			local dumpster_count = 0
 			for _, guid in ipairs(vignettes) do
 				local vignInfo = C_VignetteInfo.GetVignetteInfo(guid)
 				if vignInfo and vignInfo.name == "Overflowing Dumpster" then
-					PlaySound(ns.SHEAddonConfig["DumpsterAlertSound"], "master", true)
+					dumpster_count = dumpster_count + 1
+				end
+			end
+			if dumpster_count > 0 then
+				PlaySound(ns.SHEAddonConfig["DumpsterAlertSound"], "master", true)
+				if dumpster_count == 1 then
 					print("### Dumpster nearby!!!!")
-					break;
+				else
+					print("### " .. tostring(dumpster_count) .. " Dumpsters nearby!!!!")
 				end
 			end
 		end
